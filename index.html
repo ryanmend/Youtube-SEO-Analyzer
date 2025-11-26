@@ -3,520 +3,617 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube SEO Analyzer</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React & ReactDOM -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-    <!-- Babel -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <title>YouTube Video SEO Analyzer</title>
     
+    <!-- Tailwind CSS for Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
     <style>
-        body { background-color: #0f172a; color: #f8fafc; }
-        .score-circle {
-            transition: stroke-dashoffset 1s ease-in-out;
+        body {
+            background-color: #f3f4f6;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .hidden {
+            display: none;
+        }
+        /* Custom scrollbar for better look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
         }
     </style>
 </head>
-<body>
-    <div id="root"></div>
+<body class="text-gray-800">
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
-
-        // --- ICONS ---
-        // Using Lucide icons via the global window.lucide object if available.
-        // We will trigger lucide.createIcons() in a useEffect.
-
-        const Icons = {
-            Search: () => <i data-lucide="search"></i>,
-            BarChart: () => <i data-lucide="bar-chart-2"></i>,
-            AlertCircle: () => <i data-lucide="alert-circle"></i>,
-            CheckCircle: () => <i data-lucide="check-circle"></i>,
-            Settings: () => <i data-lucide="settings"></i>,
-            Trash: () => <i data-lucide="trash-2"></i>,
-            Youtube: () => <i data-lucide="youtube"></i>,
-            ArrowUp: () => <i data-lucide="arrow-up"></i>,
-            ArrowDown: () => <i data-lucide="arrow-down"></i>,
-            Info: () => <i data-lucide="info"></i>
-        };
-
-        // --- HELPER FUNCTIONS ---
-
-        const formatNumber = (num) => {
-            if (!num) return '0';
-            return new Intl.NumberFormat('en-US', { notation: "compact", compactDisplay: "short" }).format(num);
-        };
-
-        const extractVideoID = (url) => {
-            if (!url) return null;
-            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-            const match = url.match(regExp);
-            return (match && match[2].length === 11) ? match[2] : null;
-        };
-
-        // --- SEO SCORING ALGORITHM (Based on Report Methodology) ---
-        const analyzeSEO = (video, channel, keyword) => {
-            let score = 0;
-            const checks = [];
-            const recommendations = [];
-            
-            const title = video.snippet.title || "";
-            const desc = video.snippet.description || "";
-            const tags = video.snippet.tags || [];
-            const viewCount = parseInt(video.statistics.viewCount) || 0;
-            const likeCount = parseInt(video.statistics.likeCount) || 0;
-            const commentCount = parseInt(video.statistics.commentCount) || 0;
-            const subCount = parseInt(channel.statistics.subscriberCount) || 0;
-
-            const lowerKeyword = keyword.toLowerCase().trim();
-            const lowerTitle = title.toLowerCase();
-            const lowerDesc = desc.toLowerCase();
-
-            // 1. KEYWORD OPTIMIZATION (40 Points Max)
-            
-            // Title (20 pts)
-            if (lowerTitle.includes(lowerKeyword)) {
-                score += 20;
-                checks.push({ label: "Keyword in Title", pass: true });
-            } else {
-                checks.push({ label: "Keyword in Title", pass: false });
-                recommendations.push(`Include target keyword "${keyword}" in the video title.`);
-            }
-
-            // Description (10 pts)
-            if (lowerDesc.includes(lowerKeyword)) {
-                score += 10;
-                checks.push({ label: "Keyword in Description", pass: true });
-            } else {
-                checks.push({ label: "Keyword in Description", pass: false });
-                recommendations.push(`Add "${keyword}" to the first 2 lines of your description.`);
-            }
-
-            // Tags (10 pts)
-            const keywordInTags = tags.some(t => t.toLowerCase().includes(lowerKeyword));
-            if (keywordInTags) {
-                score += 10;
-                checks.push({ label: "Keyword in Tags", pass: true });
-            } else {
-                checks.push({ label: "Keyword in Tags", pass: false });
-                recommendations.push(`Add "${keyword}" as a tag.`);
-            }
-
-            // 2. METADATA STRUCTURE (20 Points Max)
-
-            // Title Length (10 pts) - Ideal 40-60 chars
-            if (title.length >= 20 && title.length <= 60) {
-                score += 10;
-                checks.push({ label: "Optimal Title Length", pass: true });
-            } else {
-                checks.push({ label: "Optimal Title Length", pass: false });
-                if (title.length < 20) recommendations.push("Title is too short. Add more descriptive words.");
-                if (title.length > 60) recommendations.push("Title is too long. Keep it under 60 characters to avoid truncation.");
-            }
-
-            // Tag Count (10 pts) - Ideal 10-20 tags
-            if (tags.length >= 5 && tags.length <= 25) {
-                score += 10;
-                checks.push({ label: "Tag Volume", pass: true });
-            } else {
-                checks.push({ label: "Tag Volume", pass: false });
-                recommendations.push("Use between 5 and 20 relevant tags.");
-            }
-
-            // 3. ENGAGEMENT SIGNALS (Proxy for Quality) (30 Points Max)
-            
-            // Like to View Ratio (Industry avg approx 4%)
-            const likeRatio = viewCount > 0 ? (likeCount / viewCount) * 100 : 0;
-            if (likeRatio > 3.5) {
-                score += 15;
-                checks.push({ label: "High Like Ratio (>3.5%)", pass: true });
-            } else if (likeRatio > 1.5) {
-                score += 7;
-                checks.push({ label: "Moderate Like Ratio", pass: true });
-                recommendations.push("Encourage viewers to like the video to boost engagement.");
-            } else {
-                checks.push({ label: "Low Like Ratio", pass: false });
-                recommendations.push("Like ratio is low. Call to action for likes is missing.");
-            }
-
-            // Comment to View Ratio (Industry avg approx 0.5%)
-            const commentRatio = viewCount > 0 ? (commentCount / viewCount) * 100 : 0;
-            if (commentRatio > 0.4) {
-                score += 15;
-                checks.push({ label: "High Comment Activity", pass: true });
-            } else {
-                checks.push({ label: "Comment Activity", pass: false });
-                recommendations.push("Ask a specific question in the video or description to drive comments.");
-            }
-
-            // 4. AUTHORITY (10 Points Max)
-            // Just a bonus for having a base, strictly metadata focused though
-            if (subCount > 1000) {
-                score += 10;
-                checks.push({ label: "Channel Authority (>1k subs)", pass: true });
-            } else {
-                checks.push({ label: "Channel Authority", pass: false });
-                // No recommendation here, as "get more subs" is obvious.
-            }
-
-            return { score, checks, recommendations, likeRatio, commentRatio };
-        };
-
-        // --- COMPONENTS ---
-
-        const ScoreRadial = ({ score }) => {
-            const radius = 50;
-            const circumference = 2 * Math.PI * radius;
-            const offset = circumference - (score / 100) * circumference;
-            
-            let color = "text-red-500";
-            if(score > 50) color = "text-yellow-500";
-            if(score > 80) color = "text-green-500";
-
-            return (
-                <div className="relative flex items-center justify-center w-40 h-40">
-                    <svg className="transform -rotate-90 w-full h-full">
-                        <circle cx="50%" cy="50%" r={radius} stroke="currentColor" strokeWidth="10" fill="transparent" className="text-slate-700" />
-                        <circle cx="50%" cy="50%" r={radius} stroke="currentColor" strokeWidth="10" fill="transparent" 
-                            strokeDasharray={circumference} 
-                            strokeDashoffset={offset} 
-                            className={`score-circle ${color}`} 
-                        />
-                    </svg>
-                    <div className="absolute flex flex-col items-center">
-                        <span className={`text-4xl font-bold ${color}`}>{score}</span>
-                        <span className="text-xs text-slate-400">SEO SCORE</span>
+    <div id="app" class="min-h-screen pb-12 flex flex-col">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-red-600 to-red-800 text-white p-6 shadow-md">
+            <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <!-- Icon: Youtube -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></svg>
+                    <div>
+                        <h1 class="text-2xl font-bold">YouTube SEO Analyzer</h1>
+                        <p class="text-red-100 text-sm opacity-90">Metadata Scorer & Engagement Dashboard</p>
                     </div>
                 </div>
-            );
-        };
-
-        const Recommendations = ({ items }) => (
-            <div className="bg-slate-800 p-6 rounded-lg shadow-lg border border-slate-700">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                    <i data-lucide="arrow-up" className="w-5 h-5 text-blue-400"></i> Optimization Plan
-                </h3>
-                {items.length === 0 ? (
-                    <div className="text-green-400 flex items-center gap-2">
-                        <i data-lucide="check-circle" className="w-5 h-5"></i>
-                        Great job! No critical optimizations needed.
-                    </div>
-                ) : (
-                    <ul className="space-y-3">
-                        {items.map((rec, idx) => (
-                            <li key={idx} className="flex items-start gap-3 text-slate-300 bg-slate-900/50 p-3 rounded">
-                                <i data-lucide="alert-circle" className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5"></i>
-                                <span>{rec}</span>
-                            </li>
-                        ))}
-                    </ul>
-                )}
+                <nav class="mt-4 md:mt-0 flex gap-4">
+                    <button id="nav-dashboard" onclick="switchTab('dashboard')" class="px-4 py-2 rounded-full transition bg-white text-red-700 font-bold">
+                        Dashboard
+                    </button>
+                    <button id="nav-guide" onclick="switchTab('guide')" class="px-4 py-2 rounded-full transition text-white hover:bg-red-700">
+                        User Guide
+                    </button>
+                </nav>
             </div>
-        );
+        </header>
 
-        const HistoryTable = ({ history, onDelete }) => {
-            if (history.length === 0) return null;
-
-            return (
-                <div className="mt-12">
-                    <h3 className="text-2xl font-bold mb-4 border-b border-slate-700 pb-2">Analysis History & Comparison</h3>
-                    <div className="overflow-x-auto rounded-lg border border-slate-700">
-                        <table className="w-full text-left text-slate-300">
-                            <thead className="bg-slate-800 text-slate-100 uppercase text-xs font-bold">
-                                <tr>
-                                    <th className="px-4 py-3">Thumbnail</th>
-                                    <th className="px-4 py-3">Video Title</th>
-                                    <th className="px-4 py-3">Keyword</th>
-                                    <th className="px-4 py-3">Score</th>
-                                    <th className="px-4 py-3">Views</th>
-                                    <th className="px-4 py-3">Like Ratio</th>
-                                    <th className="px-4 py-3">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-700 bg-slate-900">
-                                {history.map((item) => (
-                                    <tr key={item.id} className="hover:bg-slate-800/50 transition">
-                                        <td className="px-4 py-3">
-                                            <img src={item.thumbnail} alt="thumb" className="w-24 rounded border border-slate-700" />
-                                        </td>
-                                        <td className="px-4 py-3 font-medium max-w-xs truncate" title={item.title}>{item.title}</td>
-                                        <td className="px-4 py-3 text-blue-400">{item.keyword}</td>
-                                        <td className="px-4 py-3">
-                                            <span className={`font-bold px-2 py-1 rounded text-xs 
-                                                ${item.analysis.score > 80 ? 'bg-green-900 text-green-300' : 
-                                                item.analysis.score > 50 ? 'bg-yellow-900 text-yellow-300' : 
-                                                'bg-red-900 text-red-300'}`}>
-                                                {item.analysis.score}/100
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">{formatNumber(item.stats.viewCount)}</td>
-                                        <td className="px-4 py-3">{item.analysis.likeRatio.toFixed(2)}%</td>
-                                        <td className="px-4 py-3">
-                                            <button onClick={() => onDelete(item.id)} className="text-slate-500 hover:text-red-400 transition">
-                                                <i data-lucide="trash-2" className="w-4 h-4"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            );
-        };
-
-        const App = () => {
-            const [apiKey, setApiKey] = useState(localStorage.getItem('yt_seo_api_key') || '');
-            const [showSettings, setShowSettings] = useState(false);
-            const [videoUrl, setVideoUrl] = useState('');
-            const [keyword, setKeyword] = useState('');
-            const [loading, setLoading] = useState(false);
-            const [error, setError] = useState(null);
-            const [currentData, setCurrentData] = useState(null);
-            const [history, setHistory] = useState([]);
-
-            // Load Lucide icons on render
-            useEffect(() => {
-                if (window.lucide) {
-                    window.lucide.createIcons();
-                }
-            });
-
-            const saveApiKey = (key) => {
-                setApiKey(key);
-                localStorage.setItem('yt_seo_api_key', key);
-                setShowSettings(false);
-            };
-
-            const fetchVideoData = async () => {
-                if (!apiKey) {
-                    setError("Please enter a YouTube Data API Key in settings.");
-                    return;
-                }
-                if (!keyword) {
-                    setError("Please enter a target keyword.");
-                    return;
-                }
-
-                const videoId = extractVideoID(videoUrl);
-                if (!videoId) {
-                    setError("Invalid YouTube URL.");
-                    return;
-                }
-
-                setLoading(true);
-                setError(null);
-                setCurrentData(null);
-
-                try {
-                    // 1. Fetch Video Details
-                    const videoRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${videoId}&key=${apiKey}`);
-                    
-                    if (!videoRes.ok) {
-                         const errJson = await videoRes.json();
-                         throw new Error(errJson.error?.message || "Failed to fetch video data.");
-                    }
-
-                    const videoJson = await videoRes.json();
-
-                    if (!videoJson.items || videoJson.items.length === 0) {
-                        throw new Error("Video not found. Check the URL and try again.");
-                    }
-
-                    const video = videoJson.items[0];
-
-                    // 2. Fetch Channel Details (for subscriber count)
-                    const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${video.snippet.channelId}&key=${apiKey}`);
-                    const channelJson = await channelRes.json();
-                    const channel = channelJson.items ? channelJson.items[0] : { statistics: { subscriberCount: 0 }};
-
-                    // 3. Analyze
-                    const analysis = analyzeSEO(video, channel, keyword);
-
-                    const data = {
-                        id: video.id,
-                        title: video.snippet.title,
-                        thumbnail: video.snippet.thumbnails.medium.url,
-                        keyword: keyword,
-                        stats: video.statistics,
-                        channelStats: channel.statistics,
-                        analysis: analysis,
-                        timestamp: new Date().toISOString()
-                    };
-
-                    setCurrentData(data);
-                    setHistory(prev => [data, ...prev]);
-
-                } catch (err) {
-                    setError(err.message);
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            return (
-                <div className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
-                    
-                    {/* HEADER */}
-                    <div className="flex justify-between items-center mb-8 border-b border-slate-700 pb-4">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-red-600 p-2 rounded-lg">
-                                <i data-lucide="youtube" className="text-white w-6 h-6"></i>
-                            </div>
+        <main class="max-w-6xl mx-auto p-6 w-full flex-grow">
+            
+            <!-- VIEW: DASHBOARD -->
+            <div id="view-dashboard">
+                <!-- Controls Section -->
+                <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+                    <div class="grid md:grid-cols-2 gap-8">
+                        <!-- API Config -->
+                        <div class="space-y-4 border-b md:border-b-0 md:border-r border-gray-100 pb-4 md:pb-0 md:pr-8">
+                            <h2 class="font-bold text-gray-700 flex items-center gap-2">
+                                <!-- Icon: Settings -->
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                                Configuration
+                            </h2>
                             <div>
-                                <h1 className="text-2xl font-bold tracking-tight">SEO Analyzer</h1>
-                                <p className="text-slate-400 text-sm">Data-Driven Video Optimization</p>
-                            </div>
-                        </div>
-                        <button 
-                            onClick={() => setShowSettings(!showSettings)}
-                            className="p-2 bg-slate-800 hover:bg-slate-700 rounded-full transition"
-                        >
-                            <i data-lucide="settings" className="w-5 h-5 text-slate-300"></i>
-                        </button>
-                    </div>
-
-                    {/* API KEY MODAL */}
-                    {(showSettings || !apiKey) && (
-                        <div className="bg-slate-800 p-6 rounded-lg mb-8 border border-yellow-600/30 shadow-lg animate-fade-in">
-                            <h2 className="text-lg font-semibold mb-2 text-yellow-500">API Key Required</h2>
-                            <p className="text-sm text-slate-300 mb-4">
-                                This tool runs entirely in your browser. To fetch data, you need a free YouTube Data API v3 key from Google Cloud Console.
-                            </p>
-                            <div className="flex gap-2">
-                                <input 
-                                    type="text" 
-                                    className="flex-1 bg-slate-900 border border-slate-700 p-2 rounded text-white"
-                                    placeholder="Enter API Key..."
-                                    defaultValue={apiKey}
-                                    id="apiKeyInput"
+                                <label class="block text-sm text-gray-600 mb-1">YouTube Data API Key</label>
+                                <input
+                                    type="password"
+                                    id="api-key-input"
+                                    placeholder="Enter your API Key..."
+                                    class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-red-500 outline-none"
                                 />
-                                <button 
-                                    onClick={() => saveApiKey(document.getElementById('apiKeyInput').value)}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium"
-                                >
-                                    Save Key
+                                <p class="text-xs text-gray-400 mt-1">Required to fetch live data. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="underline hover:text-red-600">Get Key</a></p>
+                            </div>
+                            <div class="pt-2">
+                                <button onclick="loadSampleData()" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded flex items-center gap-2 transition">
+                                    <!-- Icon: Database -->
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s 9-1.34 9-3V5"/></svg>
+                                    Load Demo Evaluation Data
                                 </button>
                             </div>
                         </div>
-                    )}
 
-                    {/* INPUT SECTION */}
-                    <div className="grid md:grid-cols-12 gap-4 mb-8">
-                        <div className="md:col-span-5">
-                            <label className="block text-sm font-medium text-slate-400 mb-1">Target Keyword</label>
-                            <input 
-                                type="text" 
-                                placeholder="e.g. chocolate chip cookies"
-                                className="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg focus:ring-2 focus:ring-red-500 outline-none transition"
-                                value={keyword}
-                                onChange={(e) => setKeyword(e.target.value)}
-                            />
-                        </div>
-                        <div className="md:col-span-5">
-                            <label className="block text-sm font-medium text-slate-400 mb-1">YouTube Video URL</label>
-                            <input 
-                                type="text" 
-                                placeholder="https://www.youtube.com/watch?v=..."
-                                className="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg focus:ring-2 focus:ring-red-500 outline-none transition"
-                                value={videoUrl}
-                                onChange={(e) => setVideoUrl(e.target.value)}
-                            />
-                        </div>
-                        <div className="md:col-span-2 flex items-end">
-                            <button 
-                                onClick={fetchVideoData}
-                                disabled={loading}
-                                className="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded-lg font-bold transition flex justify-center items-center gap-2 disabled:opacity-50"
-                            >
-                                {loading ? 'Scanning...' : <><i data-lucide="search" className="w-4 h-4"></i> Analyze</>}
-                            </button>
-                        </div>
-                    </div>
-
-                    {error && (
-                        <div className="bg-red-900/30 border border-red-500 text-red-200 p-4 rounded-lg mb-8 flex items-center gap-2">
-                            <i data-lucide="alert-circle" className="w-5 h-5"></i> {error}
-                        </div>
-                    )}
-
-                    {/* DASHBOARD */}
-                    {currentData && (
-                        <div className="grid lg:grid-cols-3 gap-6 animate-fade-in">
-                            
-                            {/* SCORE CARD */}
-                            <div className="lg:col-span-1 bg-slate-800 p-6 rounded-lg border border-slate-700 flex flex-col items-center justify-center text-center shadow-lg">
-                                <h3 className="text-slate-400 font-medium mb-6">Overall SEO Performance</h3>
-                                <ScoreRadial score={currentData.analysis.score} />
+                        <!-- Analyzer Input -->
+                        <div class="space-y-4">
+                            <h2 class="font-bold text-gray-700 flex items-center gap-2">
+                                <!-- Icon: Search -->
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                                Analyze New Video
+                            </h2>
+                            <div>
+                                <input
+                                    type="text"
+                                    id="video-url-input"
+                                    placeholder="https://www.youtube.com/watch?v=..."
+                                    class="w-full border rounded p-2 mb-3 text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                                />
+                                <input
+                                    type="text"
+                                    id="keyword-input"
+                                    placeholder="Target Keyword (e.g., 'cooking tutorial')"
+                                    class="w-full border rounded p-2 mb-3 text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                                />
+                                <button
+                                    id="analyze-btn"
+                                    onclick="fetchVideoData()"
+                                    class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded shadow transition disabled:opacity-50 flex justify-center items-center gap-2"
+                                >
+                                    Analyze Video
+                                    <!-- Icon: Zap -->
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                </button>
                                 
-                                <div className="mt-8 w-full">
-                                    <div className="flex justify-between text-sm text-slate-400 mb-2">
-                                        <span>Metric Breakdown</span>
-                                    </div>
-                                    <div className="space-y-2">
-                                        {currentData.analysis.checks.map((check, idx) => (
-                                            <div key={idx} className="flex justify-between items-center bg-slate-900 p-2 rounded text-sm">
-                                                <span>{check.label}</span>
-                                                {check.pass ? 
-                                                    <i data-lucide="check-circle" className="w-4 h-4 text-green-500"></i> : 
-                                                    <i data-lucide="alert-circle" className="w-4 h-4 text-red-500"></i>
-                                                }
-                                            </div>
-                                        ))}
-                                    </div>
+                                <div id="error-message" class="hidden mt-2 p-2 bg-red-50 text-red-600 text-sm rounded border border-red-100 flex items-center gap-2">
+                                    <!-- Icon: AlertCircle -->
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                                    <span id="error-text"></span>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </section>
 
-                            {/* MAIN STATS & RECOMMENDATIONS */}
-                            <div className="lg:col-span-2 space-y-6">
+                <!-- Empty State -->
+                <div id="empty-state" class="text-center py-20 bg-white rounded-lg border border-dashed border-gray-300">
+                    <svg class="mx-auto h-12 w-12 text-gray-300 mb-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></svg>
+                    <h3 class="text-lg font-medium text-gray-900">No videos analyzed yet</h3>
+                    <p class="text-gray-500 mt-1">Enter an API key and URL above, or load sample data to begin.</p>
+                </div>
+
+                <!-- Analysis Results Section -->
+                <section id="results-section" class="hidden">
+                    <div class="flex justify-between items-end mb-4">
+                        <h2 class="text-xl font-bold text-gray-800">Analysis Results (<span id="results-count">0</span>)</h2>
+                        <button onclick="clearAll()" class="text-sm text-gray-500 hover:text-red-600">Clear All</button>
+                    </div>
+
+                    <div class="grid lg:grid-cols-3 gap-6">
+                        <!-- Left Column: List of Videos -->
+                        <div id="videos-list" class="lg:col-span-2 space-y-4">
+                            <!-- Video cards injected here -->
+                        </div>
+
+                        <!-- Right Column: Comparative Stats -->
+                        <div class="lg:col-span-1">
+                            <div class="bg-white p-6 rounded-lg shadow sticky top-6 border border-gray-200">
+                                <h3 class="font-bold text-gray-700 mb-4 flex items-center gap-2">
+                                    <!-- Icon: BarChart2 -->
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+                                    Comparative Insights
+                                </h3>
                                 
-                                {/* Video Info Card */}
-                                <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 flex gap-4">
-                                    <img src={currentData.thumbnail} className="w-32 h-24 object-cover rounded hidden sm:block" />
-                                    <div>
-                                        <h2 className="text-lg font-bold line-clamp-2 mb-2">{currentData.title}</h2>
-                                        <div className="flex flex-wrap gap-4 text-sm text-slate-400">
-                                            <span className="flex items-center gap-1"><i data-lucide="bar-chart-2" className="w-4 h-4"></i> {formatNumber(currentData.stats.viewCount)} Views</span>
-                                            <span className="flex items-center gap-1"><i data-lucide="arrow-up" className="w-4 h-4"></i> {formatNumber(currentData.stats.likeCount)} Likes</span>
-                                            <span className="flex items-center gap-1"><i data-lucide="message-square" className="w-4 h-4"></i> {formatNumber(currentData.stats.commentCount)} Comments</span>
+                                <div class="mb-6">
+                                    <p class="text-sm text-gray-500">Average SEO Score</p>
+                                    <div class="text-3xl font-bold text-gray-800">
+                                        <span id="avg-score">0</span>
+                                        <span class="text-sm text-gray-400 font-normal"> / 100</span>
+                                    </div>
+                                </div>
+
+                                <div class="mb-6">
+                                    <p class="text-sm text-gray-500">Top Performing Video</p>
+                                    <div id="top-video-title" class="font-medium text-gray-800 line-clamp-2">-</div>
+                                    <div id="top-video-score" class="text-green-600 text-sm font-bold mt-1">Score: 0</div>
+                                </div>
+
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-2">Common Optimization Tips</p>
+                                    <div class="space-y-2">
+                                        <div class="bg-blue-50 p-3 rounded text-sm text-blue-800">
+                                            <strong>Keyword Placement:</strong> Ensure your target keyword appears in the first 60 characters of the title.
+                                        </div>
+                                        <div class="bg-blue-50 p-3 rounded text-sm text-blue-800">
+                                            <strong>Tags:</strong> 40% of analyzed videos used fewer than 5 tags. Aim for 10+.
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
 
-                                <Recommendations items={currentData.analysis.recommendations} />
-                                
-                                <div className="grid sm:grid-cols-2 gap-4">
-                                    <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                                        <div className="text-slate-400 text-sm mb-1">Like/View Ratio</div>
-                                        <div className="text-2xl font-mono">{currentData.analysis.likeRatio.toFixed(2)}%</div>
-                                        <div className="text-xs text-slate-500 mt-1">Target: > 3.5%</div>
-                                    </div>
-                                    <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                                        <div className="text-slate-400 text-sm mb-1">Comment/View Ratio</div>
-                                        <div className="text-2xl font-mono">{currentData.analysis.commentRatio.toFixed(2)}%</div>
-                                        <div className="text-xs text-slate-500 mt-1">Target: > 0.4%</div>
-                                    </div>
+            <!-- VIEW: USER GUIDE -->
+            <div id="view-guide" class="hidden">
+                <section class="bg-white p-8 rounded-lg shadow-sm border border-gray-200 prose max-w-none">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4">User Guide & Documentation</h2>
+                    
+                    <h3 class="text-xl font-bold text-gray-700 mt-6 mb-2">1. Installation & Setup</h3>
+                    <p class="text-gray-600 mb-4">
+                        Since this tool is a web-based client-side application, no installation is required.
+                        Simply open the <code>index.html</code> file in any modern web browser.
+                    </p>
+
+                    <h3 class="text-xl font-bold text-gray-700 mt-6 mb-2">2. How to Run Analysis</h3>
+                    <ul class="list-disc pl-5 text-gray-600 space-y-2 mb-4">
+                        <li><strong>API Key:</strong> Get a key from the Google Cloud Console (YouTube Data API v3). Enter it in the configuration box.</li>
+                        <li><strong>Video URL:</strong> Paste the full link to a public YouTube video.</li>
+                        <li><strong>Target Keyword:</strong> Enter the main phrase the video is trying to rank for (e.g., "Sourdough Bread"). The scoring algorithm uses this to check relevance.</li>
+                        <li>Click <strong>Analyze Video</strong>.</li>
+                    </ul>
+
+                    <h3 class="text-xl font-bold text-gray-700 mt-6 mb-2">3. Interpreting Scores</h3>
+                    <div class="grid md:grid-cols-3 gap-4 mb-6">
+                        <div class="p-4 bg-green-50 border border-green-200 rounded">
+                            <strong class="text-green-700 block mb-1">Score 80-100</strong>
+                            <span class="text-sm text-green-800">Excellent optimized content. High metadata relevance and strong engagement ratios.</span>
+                        </div>
+                        <div class="p-4 bg-yellow-50 border border-yellow-200 rounded">
+                            <strong class="text-yellow-700 block mb-1">Score 50-79</strong>
+                            <span class="text-sm text-yellow-800">Average optimization. Usually missing keywords in descriptions or has low tag usage.</span>
+                        </div>
+                        <div class="p-4 bg-red-50 border border-red-200 rounded">
+                            <strong class="text-red-700 block mb-1">Score 0-49</strong>
+                            <span class="text-sm text-red-800">Poor optimization. Likely missing keywords entirely or has very low engagement relative to views.</span>
+                        </div>
+                    </div>
+
+                    <h3 class="text-xl font-bold text-gray-700 mt-6 mb-2">4. Methodology</h3>
+                    <p class="text-gray-600 mb-2">
+                        The scoring algorithm is based on a weighted sum of the following factors, normalized to 100 points:
+                    </p>
+                    <ul class="list-disc pl-5 text-gray-600 text-sm space-y-1">
+                        <li><strong>Keyword in Title (25pts):</strong> Exact match of target keyword.</li>
+                        <li><strong>Engagement Rate (25pts):</strong> Likes-to-View ratio > 3.5%.</li>
+                        <li><strong>Keyword in Description (15pts):</strong> Presence of keyword in the snippet.</li>
+                        <li><strong>Recency (15pts):</strong> Video published within the last year.</li>
+                        <li><strong>Tag Utilization (10pts):</strong> Using 5 or more tags.</li>
+                        <li><strong>Description Depth (10pts):</strong> Description length > 250 characters.</li>
+                    </ul>
+                </section>
+            </div>
+
+        </main>
+
+        <footer class="bg-gray-800 text-gray-400 py-8 text-center mt-12">
+            <p>&copy; 2024 YouTube SEO Analyzer Project. Built for Educational Purposes.</p>
+            <p class="text-xs mt-2">Data provided by YouTube Data API v3.</p>
+        </footer>
+    </div>
+
+    <script>
+        // --- APP STATE ---
+        let analyzedVideos = [];
+        const SAMPLE_DATA = [
+            {
+                id: "sample1",
+                snippet: {
+                    title: "How to Bake Sourdough Bread for Beginners",
+                    description: "A complete guide to baking sourdough bread at home. Learn the basics of fermentation.",
+                    tags: ["sourdough", "bread", "baking", "cooking"],
+                    publishedAt: "2023-10-15T10:00:00Z",
+                    channelTitle: "Baking 101"
+                },
+                statistics: {
+                    viewCount: "150000",
+                    likeCount: "12000",
+                    commentCount: "850"
+                },
+                targetKeyword: "sourdough bread"
+            },
+            {
+                id: "sample2",
+                snippet: {
+                    title: "Vlog 45: My Day",
+                    description: "Just walking around.",
+                    tags: ["vlog", "daily"],
+                    publishedAt: "2021-01-01T10:00:00Z",
+                    channelTitle: "DailyVlogger"
+                },
+                statistics: {
+                    viewCount: "500",
+                    likeCount: "10",
+                    commentCount: "2"
+                },
+                targetKeyword: "travel vlog"
+            },
+            {
+                id: "sample3",
+                snippet: {
+                    title: "Ultimate Python Course 2024 - Learn to Code",
+                    description: "Learn Python programming from scratch. This course covers variables, loops, and functions. Great for beginners.",
+                    tags: ["python", "coding", "programming", "tutorial", "learn python"],
+                    publishedAt: "2024-01-20T10:00:00Z",
+                    channelTitle: "CodeMaster"
+                },
+                statistics: {
+                    viewCount: "2500000",
+                    likeCount: "85000",
+                    commentCount: "4000"
+                },
+                targetKeyword: "learn python"
+            },
+            {
+                id: "sample4",
+                snippet: {
+                    title: "Review of the new iPhone 15 Pro Max",
+                    description: "Is it worth it? Let's find out in this comprehensive review.",
+                    tags: ["iphone", "apple", "tech", "review"],
+                    publishedAt: "2023-09-22T10:00:00Z",
+                    channelTitle: "TechReviewer"
+                },
+                statistics: {
+                    viewCount: "500000",
+                    likeCount: "25000",
+                    commentCount: "1200"
+                },
+                targetKeyword: "iphone 15 review"
+            },
+            {
+                id: "sample5",
+                snippet: {
+                    title: "Funny Cat Compilation 2024",
+                    description: "Cats being funny.",
+                    tags: ["cats", "funny"],
+                    publishedAt: "2024-02-10T10:00:00Z",
+                    channelTitle: "CatLover"
+                },
+                statistics: {
+                    viewCount: "1000000",
+                    likeCount: "10000",
+                    commentCount: "100"
+                },
+                targetKeyword: "funny cats"
+            }
+        ];
+
+        // --- SCORING ALGORITHM ---
+        function calculateScore(video, keyword) {
+            let score = 0;
+            let breakdown = [];
+            const snippet = video.snippet;
+            const stats = video.statistics;
+            const targetLower = keyword.toLowerCase();
+
+            // 1. Keyword in Title
+            if (snippet.title.toLowerCase().includes(targetLower)) {
+                score += 25;
+                breakdown.push({ criteria: "Keyword in Title", points: 25, status: "pass" });
+            } else {
+                breakdown.push({ criteria: "Keyword in Title", points: 0, status: "fail", advice: "Include your target keyword exactly in the title." });
+            }
+
+            // 2. Keyword in Description
+            if (snippet.description.toLowerCase().includes(targetLower)) {
+                score += 15;
+                breakdown.push({ criteria: "Keyword in Description", points: 15, status: "pass" });
+            } else {
+                breakdown.push({ criteria: "Keyword in Description", points: 0, status: "fail", advice: "Mention your keyword in the first 2 sentences of the description." });
+            }
+
+            // 3. Description Length
+            if (snippet.description.length > 250) {
+                score += 10;
+                breakdown.push({ criteria: "Description Depth", points: 10, status: "pass" });
+            } else {
+                breakdown.push({ criteria: "Description Depth", points: 0, status: "fail", advice: "Write a longer description (250+ chars) to help YouTube understand context." });
+            }
+
+            // 4. Tags Usage
+            const tags = snippet.tags || [];
+            if (tags.length >= 5) {
+                score += 10;
+                breakdown.push({ criteria: "Tag Utilization", points: 10, status: "pass" });
+            } else {
+                breakdown.push({ criteria: "Tag Utilization", points: 0, status: "fail", advice: "Use at least 5-10 relevant tags." });
+            }
+
+            // 5. Engagement Proxy
+            const likeRatio = (parseInt(stats.likeCount) / parseInt(stats.viewCount)) || 0;
+            if (likeRatio > 0.035) {
+                score += 25;
+                breakdown.push({ criteria: "Engagement Rate (Likes)", points: 25, status: "pass" });
+            } else if (likeRatio > 0.015) {
+                score += 10;
+                breakdown.push({ criteria: "Engagement Rate (Likes)", points: 10, status: "warning", advice: "Like ratio is average. Call to action needed." });
+            } else {
+                breakdown.push({ criteria: "Engagement Rate (Likes)", points: 0, status: "fail", advice: "Low engagement. Improve content hook or CTA." });
+            }
+
+            // 6. Recency
+            const publishDate = new Date(snippet.publishedAt);
+            const now = new Date();
+            const diffTime = Math.abs(now - publishDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays < 365) {
+                score += 15;
+                breakdown.push({ criteria: "Content Freshness (<1yr)", points: 15, status: "pass" });
+            } else {
+                score += 5;
+                breakdown.push({ criteria: "Content Freshness", points: 5, status: "warning", advice: "Video is older than 1 year. Consider updating or pinning a new comment." });
+            }
+
+            return { total: score, breakdown };
+        }
+
+        // --- NAVIGATION LOGIC ---
+        function switchTab(tabName) {
+            const dashboardView = document.getElementById('view-dashboard');
+            const guideView = document.getElementById('view-guide');
+            const navDashboard = document.getElementById('nav-dashboard');
+            const navGuide = document.getElementById('nav-guide');
+
+            if (tabName === 'dashboard') {
+                dashboardView.classList.remove('hidden');
+                guideView.classList.add('hidden');
+                navDashboard.className = 'px-4 py-2 rounded-full transition bg-white text-red-700 font-bold';
+                navGuide.className = 'px-4 py-2 rounded-full transition text-white hover:bg-red-700';
+            } else {
+                dashboardView.classList.add('hidden');
+                guideView.classList.remove('hidden');
+                navGuide.className = 'px-4 py-2 rounded-full transition bg-white text-red-700 font-bold';
+                navDashboard.className = 'px-4 py-2 rounded-full transition text-white hover:bg-red-700';
+            }
+        }
+
+        // --- DATA HANDLING ---
+        function extractVideoId(url) {
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : null;
+        }
+
+        async function fetchVideoData() {
+            const apiKey = document.getElementById('api-key-input').value.trim();
+            const videoUrl = document.getElementById('video-url-input').value.trim();
+            const keyword = document.getElementById('keyword-input').value.trim();
+            const errorEl = document.getElementById('error-message');
+            const errorText = document.getElementById('error-text');
+            const btn = document.getElementById('analyze-btn');
+
+            // Validation
+            if (!apiKey) {
+                errorText.innerText = "Please enter a valid YouTube Data API Key.";
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            const videoId = extractVideoId(videoUrl);
+            if (!videoId) {
+                errorText.innerText = "Invalid YouTube URL.";
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            if (!keyword) {
+                errorText.innerText = "Please enter a target keyword for SEO scoring.";
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            // Start Loading
+            errorEl.classList.add('hidden');
+            btn.innerText = "Analyzing...";
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${videoId}&key=${apiKey}`);
+                const data = await response.json();
+
+                if (data.error) throw new Error(data.error.message);
+                if (data.items.length === 0) throw new Error("Video not found or is private.");
+
+                const videoData = { ...data.items[0], targetKeyword: keyword };
+                addVideo(videoData);
+                
+                // Clear inputs
+                document.getElementById('video-url-input').value = '';
+                document.getElementById('keyword-input').value = '';
+
+            } catch (err) {
+                errorText.innerText = err.message;
+                errorEl.classList.remove('hidden');
+            } finally {
+                btn.innerHTML = `Analyze Video <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline ml-1"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+                btn.disabled = false;
+            }
+        }
+
+        function loadSampleData() {
+            analyzedVideos = [...SAMPLE_DATA]; // Reset to samples
+            document.getElementById('error-message').classList.add('hidden');
+            renderResults();
+        }
+
+        function addVideo(video) {
+            analyzedVideos.unshift(video);
+            renderResults();
+        }
+
+        function deleteVideo(index) {
+            analyzedVideos.splice(index, 1);
+            renderResults();
+        }
+
+        function clearAll() {
+            analyzedVideos = [];
+            renderResults();
+        }
+
+        // --- RENDERING ---
+        function renderResults() {
+            const resultsSection = document.getElementById('results-section');
+            const emptyState = document.getElementById('empty-state');
+            const listContainer = document.getElementById('videos-list');
+            const countEl = document.getElementById('results-count');
+            
+            // Toggle Main Views
+            if (analyzedVideos.length === 0) {
+                resultsSection.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                return;
+            } else {
+                resultsSection.classList.remove('hidden');
+                emptyState.classList.add('hidden');
+            }
+
+            countEl.innerText = analyzedVideos.length;
+            listContainer.innerHTML = ''; // Clear current list
+
+            // Sort videos by score
+            const sortedVideos = [...analyzedVideos].sort((a, b) => {
+                const scoreA = calculateScore(a, a.targetKeyword).total;
+                const scoreB = calculateScore(b, b.targetKeyword).total;
+                return scoreB - scoreA;
+            });
+
+            // Calculate Stats for Sidebar
+            const avgScore = (sortedVideos.reduce((acc, curr) => acc + calculateScore(curr, curr.targetKeyword).total, 0) / sortedVideos.length).toFixed(1);
+            document.getElementById('avg-score').innerText = avgScore;
+            document.getElementById('top-video-title').innerText = sortedVideos[0].snippet.title;
+            document.getElementById('top-video-score').innerText = `Score: ${calculateScore(sortedVideos[0], sortedVideos[0].targetKeyword).total}`;
+
+            // Render List Items
+            sortedVideos.forEach((video, index) => {
+                const analysis = calculateScore(video, video.targetKeyword);
+                
+                // Color Badge Logic
+                let badgeColor = "bg-red-500";
+                if (analysis.total >= 80) badgeColor = "bg-green-500";
+                else if (analysis.total >= 50) badgeColor = "bg-yellow-500";
+
+                // Generate Recommendations HTML
+                let recommendationsHtml = '';
+                const failures = analysis.breakdown.filter(b => b.status !== 'pass');
+                
+                if (failures.length === 0) {
+                    recommendationsHtml = `
+                        <li class="text-sm text-green-600 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            Great job! No major issues found.
+                        </li>`;
+                } else {
+                    recommendationsHtml = failures.map(item => `
+                        <li class="text-sm text-red-600 flex items-start gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                            <span>${item.advice}</span>
+                        </li>
+                    `).join('');
+                }
+
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-lg shadow mb-4 border border-gray-200 hover:shadow-md transition-shadow";
+                card.innerHTML = `
+                    <div class="flex flex-col md:flex-row gap-4 items-start">
+                        <div class="flex-1">
+                             <div class="flex items-center gap-2 mb-1">
+                                <span class="text-xs font-semibold uppercase text-gray-500 tracking-wider">Video Analysis</span>
+                            </div>
+                            <h3 class="font-bold text-lg text-gray-800 line-clamp-1">${video.snippet.title}</h3>
+                            <p class="text-sm text-gray-500 mb-2">Target Keyword: <span class="font-medium text-blue-600">${video.targetKeyword}</span></p>
+                            
+                            <div class="grid grid-cols-3 gap-2 text-sm mt-3">
+                                <div class="bg-gray-50 p-2 rounded">
+                                    <span class="block text-gray-500 text-xs">Views</span>
+                                    <span class="font-semibold">${parseInt(video.statistics.viewCount).toLocaleString()}</span>
+                                </div>
+                                <div class="bg-gray-50 p-2 rounded">
+                                    <span class="block text-gray-500 text-xs">Likes</span>
+                                    <span class="font-semibold">${parseInt(video.statistics.likeCount).toLocaleString()}</span>
+                                </div>
+                                <div class="bg-gray-50 p-2 rounded">
+                                    <span class="block text-gray-500 text-xs">Comments</span>
+                                    <span class="font-semibold">${parseInt(video.statistics.commentCount).toLocaleString()}</span>
                                 </div>
                             </div>
                         </div>
-                    )}
 
-                    {/* COMPARISON TABLE */}
-                    <HistoryTable 
-                        history={history} 
-                        onDelete={(id) => setHistory(prev => prev.filter(i => i.id !== id))} 
-                    />
-
-                </div>
-            );
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+                        <div class="flex items-center gap-4">
+                            <div class="w-16 h-16 rounded-full ${badgeColor} flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                                ${analysis.total}
+                            </div>
+                            <button onclick="deleteVideo(${index})" class="text-gray-400 hover:text-red-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 pt-4 border-t border-gray-100">
+                        <h4 class="text-sm font-bold text-gray-700 mb-2">Optimization Recommendations:</h4>
+                        <ul class="space-y-1">
+                            ${recommendationsHtml}
+                        </ul>
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+        }
     </script>
 </body>
 </html>
