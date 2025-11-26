@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube SEO Analyzer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; }
+        .score-circle {
+            transition: stroke-dashoffset 1s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- ICONS ---
+        // Using Lucide icons via the global window.lucide object if available, or simpler text fallbacks if issues arise.
+        // We will trigger lucide.createIcons() in a useEffect.
+
+        const Icons = {
+            Search: () => <i data-lucide="search"></i>,
+            BarChart: () => <i data-lucide="bar-chart-2"></i>,
+            AlertCircle: () => <i data-lucide="alert-circle"></i>,
+            CheckCircle: () => <i data-lucide="check-circle"></i>,
+            Settings: () => <i data-lucide="settings"></i>,
+            Trash: () => <i data-lucide="trash-2"></i>,
+            Youtube: () => <i data-lucide="youtube"></i>,
+            ArrowUp: () => <i data-lucide="arrow-up"></i>,
+            ArrowDown: () => <i data-lucide="arrow-down"></i>,
+            Info: () => <i data-lucide="info"></i>
+        };
+
+        // --- HELPER FUNCTIONS ---
+
+        const formatNumber = (num) => {
+            if (!num) return '0';
+            return new Intl.NumberFormat('en-US', { notation: "compact", compactDisplay: "short" }).format(num);
+        };
+
+        const extractVideoID = (url) => {
+            if (!url) return null;
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : null;
+        };
+
+        // --- SEO SCORING ALGORITHM (Based on Report Methodology) ---
+        const analyzeSEO = (video, channel, keyword) => {
+            let score = 0;
+            const checks = [];
+            const recommendations = [];
+            
+            const title = video.snippet.title || "";
+            const desc = video.snippet.description || "";
+            const tags = video.snippet.tags || [];
+            const viewCount = parseInt(video.statistics.viewCount) || 0;
+            const likeCount = parseInt(video.statistics.likeCount) || 0;
+            const commentCount = parseInt(video.statistics.commentCount) || 0;
+            const subCount = parseInt(channel.statistics.subscriberCount) || 0;
+
+            const lowerKeyword = keyword.toLowerCase().trim();
+            const lowerTitle = title.toLowerCase();
+            const lowerDesc = desc.toLowerCase();
+
+            // 1. KEYWORD OPTIMIZATION (40 Points Max)
+            
+            // Title (20 pts)
+            if (lowerTitle.includes(lowerKeyword)) {
+                score += 20;
+                checks.push({ label: "Keyword in Title", pass: true });
+            } else {
+                checks.push({ label: "Keyword in Title", pass: false });
+                recommendations.push(`Include target keyword "${keyword}" in the video title.`);
+            }
+
+            // Description (10 pts)
+            if (lowerDesc.includes(lowerKeyword)) {
+                score += 10;
+                checks.push({ label: "Keyword in Description", pass: true });
+            } else {
+                checks.push({ label: "Keyword in Description", pass: false });
+                recommendations.push(`Add "${keyword}" to the first 2 lines of your description.`);
+            }
+
+            // Tags (10 pts)
+            const keywordInTags = tags.some(t => t.toLowerCase().includes(lowerKeyword));
+            if (keywordInTags) {
+                score += 10;
+                checks.push({ label: "Keyword in Tags", pass: true });
+            } else {
+                checks.push({ label: "Keyword in Tags", pass: false });
+                recommendations.push(`Add "${keyword}" as a tag.`);
+            }
+
+            // 2. METADATA STRUCTURE (20 Points Max)
+
+            // Title Length (10 pts) - Ideal 40-60 chars
+            if (title.length >= 20 && title.length <= 60) {
+                score += 10;
+                checks.push({ label: "Optimal Title Length", pass: true });
+            } else {
+                checks.push({ label: "Optimal Title Length", pass: false });
+                if (title.length < 20) recommendations.push("Title is too short. Add more descriptive words.");
+                if (title.length > 60) recommendations.push("Title is too long. Keep it under 60 characters to avoid truncation.");
+            }
+
+            // Tag Count (10 pts) - Ideal 10-20 tags
+            if (tags.length >= 5 && tags.length <= 25) {
+                score += 10;
+                checks.push({ label: "Tag Volume", pass: true });
+            } else {
+                checks.push({ label: "Tag Volume", pass: false });
+                recommendations.push("Use between 5 and 20 relevant tags.");
+            }
+
+            // 3. ENGAGEMENT SIGNALS (Proxy for Quality) (30 Points Max)
+            
+            // Like to View Ratio (Industry avg approx 4%)
+            const likeRatio = viewCount > 0 ? (likeCount / viewCount) * 100 : 0;
+            if (likeRatio > 3.5) {
+                score += 15;
+                checks.push({ label: "High Like Ratio (>3.5%)", pass: true });
+            } else if (likeRatio > 1.5) {
+                score += 7;
+                checks.push({ label: "Moderate Like Ratio", pass: true });
+                recommendations.push("Encourage viewers to like the video to boost engagement.");
+            } else {
+                checks.push({ label: "Low Like Ratio", pass: false });
+                recommendations.push("Like ratio is low. Call to action for likes is missing.");
+            }
+
+            // Comment to View Ratio (Industry avg approx 0.5%)
+            const commentRatio = viewCount > 0 ? (commentCount / viewCount) * 100 : 0;
+            if (commentRatio > 0.4) {
+                score += 15;
+                checks.push({ label: "High Comment Activity", pass: true });
+            } else {
+                checks.push({ label: "Comment Activity", pass: false });
+                recommendations.push("Ask a specific question in the video or description to drive comments.");
+            }
+
+            // 4. AUTHORITY (10 Points Max)
+            // Just a bonus for having a base, strictly metadata focused though
+            if (subCount > 1000) {
+                score += 10;
+                checks.push({ label: "Channel Authority (>1k subs)", pass: true });
+            } else {
+                checks.push({ label: "Channel Authority", pass: false });
+                // No recommendation here, as "get more subs" is obvious.
+            }
+
+            return { score, checks, recommendations, likeRatio, commentRatio };
+        };
+
+        // --- COMPONENTS ---
+
+        const ScoreRadial = ({ score }) => {
+            const radius = 50;
+            const circumference = 2 * Math.PI * radius;
+            const offset = circumference - (score / 100) * circumference;
+            
+            let color = "text-red-500";
+            if(score > 50) color = "text-yellow-500";
+            if(score > 80) color = "text-green-500";
+
+            return (
+                <div className="relative flex items-center justify-center w-40 h-40">
+                    <svg className="transform -rotate-90 w-full h-full">
+                        <circle cx="50%" cy="50%" r={radius} stroke="currentColor" strokeWidth="10" fill="transparent" className="text-slate-700" />
+                        <circle cx="50%" cy="50%" r={radius} stroke="currentColor" strokeWidth="10" fill="transparent" 
+                            strokeDasharray={circumference} 
+                            strokeDashoffset={offset} 
+                            className={`score-circle ${color}`} 
+                        />
+                    </svg>
+                    <div className="absolute flex flex-col items-center">
+                        <span className={`text-4xl font-bold ${color}`}>{score}</span>
+                        <span className="text-xs text-slate-400">SEO SCORE</span>
+                    </div>
+                </div>
+            );
+        };
+
+        const Recommendations = ({ items }) => (
+            <div className="bg-slate-800 p-6 rounded-lg shadow-lg border border-slate-700">
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <i data-lucide="arrow-up" className="w-5 h-5 text-blue-400"></i> Optimization Plan
+                </h3>
+                {items.length === 0 ? (
+                    <div className="text-green-400 flex items-center gap-2">
+                        <i data-lucide="check-circle" className="w-5 h-5"></i>
+                        Great job! No critical optimizations needed.
+                    </div>
+                ) : (
+                    <ul className="space-y-3">
+                        {items.map((rec, idx) => (
+                            <li key={idx} className="flex items-start gap-3 text-slate-300 bg-slate-900/50 p-3 rounded">
+                                <i data-lucide="alert-circle" className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5"></i>
+                                <span>{rec}</span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+        );
+
+        const HistoryTable = ({ history, onDelete }) => {
+            if (history.length === 0) return null;
+
+            return (
+                <div className="mt-12">
+                    <h3 className="text-2xl font-bold mb-4 border-b border-slate-700 pb-2">Analysis History & Comparison</h3>
+                    <div className="overflow-x-auto rounded-lg border border-slate-700">
+                        <table className="w-full text-left text-slate-300">
+                            <thead className="bg-slate-800 text-slate-100 uppercase text-xs font-bold">
+                                <tr>
+                                    <th className="px-4 py-3">Thumbnail</th>
+                                    <th className="px-4 py-3">Video Title</th>
+                                    <th className="px-4 py-3">Keyword</th>
+                                    <th className="px-4 py-3">Score</th>
+                                    <th className="px-4 py-3">Views</th>
+                                    <th className="px-4 py-3">Like Ratio</th>
+                                    <th className="px-4 py-3">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-700 bg-slate-900">
+                                {history.map((item) => (
+                                    <tr key={item.id} className="hover:bg-slate-800/50 transition">
+                                        <td className="px-4 py-3">
+                                            <img src={item.thumbnail} alt="thumb" className="w-24 rounded border border-slate-700" />
+                                        </td>
+                                        <td className="px-4 py-3 font-medium max-w-xs truncate" title={item.title}>{item.title}</td>
+                                        <td className="px-4 py-3 text-blue-400">{item.keyword}</td>
+                                        <td className="px-4 py-3">
+                                            <span className={`font-bold px-2 py-1 rounded text-xs 
+                                                ${item.analysis.score > 80 ? 'bg-green-900 text-green-300' : 
+                                                item.analysis.score > 50 ? 'bg-yellow-900 text-yellow-300' : 
+                                                'bg-red-900 text-red-300'}`}>
+                                                {item.analysis.score}/100
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3">{formatNumber(item.stats.viewCount)}</td>
+                                        <td className="px-4 py-3">{item.analysis.likeRatio.toFixed(2)}%</td>
+                                        <td className="px-4 py-3">
+                                            <button onClick={() => onDelete(item.id)} className="text-slate-500 hover:text-red-400 transition">
+                                                <i data-lucide="trash-2" className="w-4 h-4"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [apiKey, setApiKey] = useState(localStorage.getItem('yt_seo_api_key') || '');
+            const [showSettings, setShowSettings] = useState(false);
+            const [videoUrl, setVideoUrl] = useState('');
+            const [keyword, setKeyword] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const [currentData, setCurrentData] = useState(null);
+            const [history, setHistory] = useState([]);
+
+            // Load Lucide icons on render
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            });
+
+            const saveApiKey = (key) => {
+                setApiKey(key);
+                localStorage.setItem('yt_seo_api_key', key);
+                setShowSettings(false);
+            };
+
+            const fetchVideoData = async () => {
+                if (!apiKey) {
+                    setError("Please enter a YouTube Data API Key in settings.");
+                    return;
+                }
+                if (!keyword) {
+                    setError("Please enter a target keyword.");
+                    return;
+                }
+
+                const videoId = extractVideoID(videoUrl);
+                if (!videoId) {
+                    setError("Invalid YouTube URL.");
+                    return;
+                }
+
+                setLoading(true);
+                setError(null);
+                setCurrentData(null);
+
+                try {
+                    // 1. Fetch Video Details
+                    const videoRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${videoId}&key=${apiKey}`);
+                    
+                    if (!videoRes.ok) {
+                         const errJson = await videoRes.json();
+                         throw new Error(errJson.error?.message || "Failed to fetch video data.");
+                    }
+
+                    const videoJson = await videoRes.json();
+
+                    if (!videoJson.items || videoJson.items.length === 0) {
+                        throw new Error("Video not found. Check the URL and try again.");
+                    }
+
+                    const video = videoJson.items[0];
+
+                    // 2. Fetch Channel Details (for subscriber count)
+                    const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${video.snippet.channelId}&key=${apiKey}`);
+                    const channelJson = await channelRes.json();
+                    const channel = channelJson.items ? channelJson.items[0] : { statistics: { subscriberCount: 0 }};
+
+                    // 3. Analyze
+                    const analysis = analyzeSEO(video, channel, keyword);
+
+                    const data = {
+                        id: video.id,
+                        title: video.snippet.title,
+                        thumbnail: video.snippet.thumbnails.medium.url,
+                        keyword: keyword,
+                        stats: video.statistics,
+                        channelStats: channel.statistics,
+                        analysis: analysis,
+                        timestamp: new Date().toISOString()
+                    };
+
+                    setCurrentData(data);
+                    setHistory(prev => [data, ...prev]);
+
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
+                    
+                    {/* HEADER */}
+                    <div className="flex justify-between items-center mb-8 border-b border-slate-700 pb-4">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-red-600 p-2 rounded-lg">
+                                <i data-lucide="youtube" className="text-white w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <h1 className="text-2xl font-bold tracking-tight">SEO Analyzer</h1>
+                                <p className="text-slate-400 text-sm">Data-Driven Video Optimization</p>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => setShowSettings(!showSettings)}
+                            className="p-2 bg-slate-800 hover:bg-slate-700 rounded-full transition"
+                        >
+                            <i data-lucide="settings" className="w-5 h-5 text-slate-300"></i>
+                        </button>
+                    </div>
+
+                    {/* API KEY MODAL */}
+                    {(showSettings || !apiKey) && (
+                        <div className="bg-slate-800 p-6 rounded-lg mb-8 border border-yellow-600/30 shadow-lg animate-fade-in">
+                            <h2 className="text-lg font-semibold mb-2 text-yellow-500">API Key Required</h2>
+                            <p className="text-sm text-slate-300 mb-4">
+                                This tool runs entirely in your browser. To fetch data, you need a free YouTube Data API v3 key from Google Cloud Console.
+                            </p>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="text" 
+                                    className="flex-1 bg-slate-900 border border-slate-700 p-2 rounded text-white"
+                                    placeholder="Enter API Key..."
+                                    defaultValue={apiKey}
+                                    id="apiKeyInput"
+                                />
+                                <button 
+                                    onClick={() => saveApiKey(document.getElementById('apiKeyInput').value)}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium"
+                                >
+                                    Save Key
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* INPUT SECTION */}
+                    <div className="grid md:grid-cols-12 gap-4 mb-8">
+                        <div className="md:col-span-5">
+                            <label className="block text-sm font-medium text-slate-400 mb-1">Target Keyword</label>
+                            <input 
+                                type="text" 
+                                placeholder="e.g. chocolate chip cookies"
+                                className="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg focus:ring-2 focus:ring-red-500 outline-none transition"
+                                value={keyword}
+                                onChange={(e) => setKeyword(e.target.value)}
+                            />
+                        </div>
+                        <div className="md:col-span-5">
+                            <label className="block text-sm font-medium text-slate-400 mb-1">YouTube Video URL</label>
+                            <input 
+                                type="text" 
+                                placeholder="https://www.youtube.com/watch?v=..."
+                                className="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg focus:ring-2 focus:ring-red-500 outline-none transition"
+                                value={videoUrl}
+                                onChange={(e) => setVideoUrl(e.target.value)}
+                            />
+                        </div>
+                        <div className="md:col-span-2 flex items-end">
+                            <button 
+                                onClick={fetchVideoData}
+                                disabled={loading}
+                                className="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded-lg font-bold transition flex justify-center items-center gap-2 disabled:opacity-50"
+                            >
+                                {loading ? 'Scanning...' : <><i data-lucide="search" className="w-4 h-4"></i> Analyze</>}
+                            </button>
+                        </div>
+                    </div>
+
+                    {error && (
+                        <div className="bg-red-900/30 border border-red-500 text-red-200 p-4 rounded-lg mb-8 flex items-center gap-2">
+                            <i data-lucide="alert-circle" className="w-5 h-5"></i> {error}
+                        </div>
+                    )}
+
+                    {/* DASHBOARD */}
+                    {currentData && (
+                        <div className="grid lg:grid-cols-3 gap-6 animate-fade-in">
+                            
+                            {/* SCORE CARD */}
+                            <div className="lg:col-span-1 bg-slate-800 p-6 rounded-lg border border-slate-700 flex flex-col items-center justify-center text-center shadow-lg">
+                                <h3 className="text-slate-400 font-medium mb-6">Overall SEO Performance</h3>
+                                <ScoreRadial score={currentData.analysis.score} />
+                                
+                                <div className="mt-8 w-full">
+                                    <div className="flex justify-between text-sm text-slate-400 mb-2">
+                                        <span>Metric Breakdown</span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {currentData.analysis.checks.map((check, idx) => (
+                                            <div key={idx} className="flex justify-between items-center bg-slate-900 p-2 rounded text-sm">
+                                                <span>{check.label}</span>
+                                                {check.pass ? 
+                                                    <i data-lucide="check-circle" className="w-4 h-4 text-green-500"></i> : 
+                                                    <i data-lucide="alert-circle" className="w-4 h-4 text-red-500"></i>
+                                                }
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* MAIN STATS & RECOMMENDATIONS */}
+                            <div className="lg:col-span-2 space-y-6">
+                                
+                                {/* Video Info Card */}
+                                <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 flex gap-4">
+                                    <img src={currentData.thumbnail} className="w-32 h-24 object-cover rounded hidden sm:block" />
+                                    <div>
+                                        <h2 className="text-lg font-bold line-clamp-2 mb-2">{currentData.title}</h2>
+                                        <div className="flex flex-wrap gap-4 text-sm text-slate-400">
+                                            <span className="flex items-center gap-1"><i data-lucide="bar-chart-2" className="w-4 h-4"></i> {formatNumber(currentData.stats.viewCount)} Views</span>
+                                            <span className="flex items-center gap-1"><i data-lucide="arrow-up" className="w-4 h-4"></i> {formatNumber(currentData.stats.likeCount)} Likes</span>
+                                            <span className="flex items-center gap-1"><i data-lucide="message-square" className="w-4 h-4"></i> {formatNumber(currentData.stats.commentCount)} Comments</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <Recommendations items={currentData.analysis.recommendations} />
+                                
+                                <div className="grid sm:grid-cols-2 gap-4">
+                                    <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                                        <div className="text-slate-400 text-sm mb-1">Like/View Ratio</div>
+                                        <div className="text-2xl font-mono">{currentData.analysis.likeRatio.toFixed(2)}%</div>
+                                        <div className="text-xs text-slate-500 mt-1">Target: > 3.5%</div>
+                                    </div>
+                                    <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                                        <div className="text-slate-400 text-sm mb-1">Comment/View Ratio</div>
+                                        <div className="text-2xl font-mono">{currentData.analysis.commentRatio.toFixed(2)}%</div>
+                                        <div className="text-xs text-slate-500 mt-1">Target: > 0.4%</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* COMPARISON TABLE */}
+                    <HistoryTable 
+                        history={history} 
+                        onDelete={(id) => setHistory(prev => prev.filter(i => i.id !== id))} 
+                    />
+
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
