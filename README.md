@@ -62,7 +62,7 @@ The SEO Score (0-100) is calculated using a weighted sum of the following criter
 | Criteria             | Weight | Description                                    |
 | -------------------- | ------ | ---------------------------------------------- |
 | Keyword in Title    | 25 pts | Checks if the target keyword appears exactly in the video title. |
-| Engagement Rate      | 25 pts | Checks if the Like-to-View ratio is healthy (> 3.5%). |
+| Engagement Rate      | 25 pts | Checks if the Like-to-View ratio is healthy. |
 | Keyword in Description | 15 pts | Checks if the keyword appears in the video description. |
 | Recency              | 15 pts | Checks if the video was published within the last 365 days. |
 | Tag Utilization      | 10 pts | Checks if the video uses at least 5 tags.       |
